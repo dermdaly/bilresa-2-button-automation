@@ -157,13 +157,6 @@ A room with multiple bulbs grouped into a single light:
 
 ---
 
-##  Project Structure
-bilresa-ha-blueprint/
-├── README.md
-└── bilresa_light.yaml
-
----
-
 ## License
 
 MIT License
