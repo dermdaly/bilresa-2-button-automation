@@ -1,0 +1,177 @@
+blueprint:
+  name: Bilresa 2-button light controller (brightness + warmth)
+  description: >
+    Control a light/group with an IKEA Bilresa 2-button switch.
+
+    - Button 1 single press → brightness up
+    - Button 2 single press → brightness down
+    - Button 1 long press → full brightness
+    - Button 2 long press → off
+    - Button 1 double press → warmer
+    - Button 2 double press → cooler
+  author: Dermot Daly
+  source_url: https://github.com/dermdaly/bilresa-2-button-automation
+  domain: automation
+
+  input:
+    button_1_event:
+      name: Button 1 event entity
+      selector:
+        entity:
+          domain: event
+
+    button_2_event:
+      name: Button 2 event entity
+      selector:
+        entity:
+          domain: event
+
+    target_light:
+      name: Target light/group
+      selector:
+        target:
+          entity:
+            domain: light
+
+    brightness_step:
+      name: Brightness step %
+      default: 20
+      selector:
+        number:
+          min: 1
+          max: 100
+          step: 1
+
+    warmth_step:
+      name: Warmth step %
+      default: 15
+      selector:
+        number:
+          min: 1
+          max: 50
+          step: 1
+
+mode: restart
+
+variables:
+  target: !input target_light
+  brightness_step: !input brightness_step
+  warmth_step: !input warmth_step
+
+  entity_id: >
+    {% if target.entity_id is string %}
+      {{ target.entity_id }}
+    {% else %}
+      {{ target.entity_id[0] }}
+    {% endif %}
+
+  current: "{{ state_attr(entity_id, 'color_temp_kelvin') | int(3000) }}"
+  min_k: "{{ state_attr(entity_id, 'min_color_temp_kelvin') | int(2000) }}"
+  max_k: "{{ state_attr(entity_id, 'max_color_temp_kelvin') | int(6500) }}"
+
+  range: "{{ max_k - min_k }}"
+  step_k: "{{ (range * warmth_step / 100) | int }}"
+
+triggers:
+  - trigger: state
+    entity_id: !input button_1_event
+    id: b1
+
+  - trigger: state
+    entity_id: !input button_2_event
+    id: b2
+
+actions:
+  - choose:
+
+      # -----------------------
+      # BUTTON 1
+      # -----------------------
+
+      # Brightness up
+      - conditions:
+          - condition: trigger
+            id: b1
+          - condition: state
+            entity_id: !input button_1_event
+            attribute: event_type
+            state: multi_press_1
+        sequence:
+          - action: light.turn_on
+            target: !input target_light
+            data:
+              brightness_step_pct: "{{ brightness_step }}"
+
+      # Full brightness
+      - conditions:
+          - condition: trigger
+            id: b1
+          - condition: state
+            entity_id: !input button_1_event
+            attribute: event_type
+            state: long_press
+        sequence:
+          - action: light.turn_on
+            target: !input target_light
+            data:
+              brightness_pct: 100
+
+      # Warmer
+      - conditions:
+          - condition: trigger
+            id: b1
+          - condition: state
+            entity_id: !input button_1_event
+            attribute: event_type
+            state: multi_press_2
+        sequence:
+          - action: light.turn_on
+            target: !input target_light
+            data:
+              color_temp_kelvin: >
+                {{ [current - step_k, min_k] | max }}
+
+      # -----------------------
+      # BUTTON 2
+      # -----------------------
+
+      # Brightness down
+      - conditions:
+          - condition: trigger
+            id: b2
+          - condition: state
+            entity_id: !input button_2_event
+            attribute: event_type
+            state: multi_press_1
+        sequence:
+          - action: light.turn_on
+            target: !input target_light
+            data:
+              brightness_step_pct: "{{ 0 - brightness_step }}"
+
+      # Off
+      - conditions:
+          - condition: trigger
+            id: b2
+          - condition: state
+            entity_id: !input button_2_event
+            attribute: event_type
+            state: long_press
+        sequence:
+          - action: light.turn_off
+            target: !input target_light
+
+      # Cooler
+      - conditions:
+          - condition: trigger
+            id: b2
+          - condition: state
+            entity_id: !input button_2_event
+            attribute: event_type
+            state: multi_press_2
+        sequence:
+          - action: light.turn_on
+            target: !input target_light
+            data:
+              color_temp_kelvin: >
+                {{ [current + step_k, max_k] | min }}
